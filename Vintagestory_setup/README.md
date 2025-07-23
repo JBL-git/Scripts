@@ -1,1 +1,1 @@
-
+vintage story microsoft.NETCore.App version 8.0.16 works for dedicated server hosting in case anyone was curious. Not all linux operating systems have access to net 7 as easily like aws linux for example. This means when you start your server, it may crash. You need to change the vintagestoryserver.runtimeconfig.json file to say reflect that you are using that
