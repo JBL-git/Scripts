@@ -3,8 +3,8 @@
 echo "==> Updating system..."
 sudo yum update -y
 
-echo "==> Installing htop, nmap, iotop, glances, clamav, tmux, openssh, openssl..."
-sudo yum install htop nmap iotop glances clamav tmux openssh openssl
+echo "==> Installing firewalld, tmux, openssh, openssl..."
+sudo yum install tmux openssh openssl
 sudo yum install firewalld -y
 
 echo "==> Starting and enabling firewalld..."
