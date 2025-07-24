@@ -1,0 +1,33 @@
+#!/bin/bash
+
+echo "==> Updating..."
+sudo pacman -Syu --noconfirm
+
+echo "==> Installing toolset 1..."
+sudo pacman -S --noconfirm base-devel git glances, clamav, tmux, openssh, firewalld, base-devl
+
+echo "==> Installing toolset 2..."
+sudo pacman -S --noconfirm networkmanager, nano, unzip, zip, wget, curl, openssl, firefox
+
+echo "==> Installing audio tools..."
+sudo pacman -S --noconfirm pipewire pipewire-audio pipewire-pulse wireplumber
+
+echo "==> Enabling audio..." 
+systemctl --user enable --now pipewire pipewire-pulse wireplumber
+
+echo "==> Installing toolset 3..."
+sudo pacman -S python 
+
+
+echo "==> 
+git clone https://aur.archlinux.org/yay.git
+cd yay && makepkg -si
+
+
+
+
+
+
+
+
+
