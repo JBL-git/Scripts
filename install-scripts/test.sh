@@ -8,19 +8,19 @@ timedatectl set-ntp true
 
 echo "Partitioning /dev/vda..."
 fdisk /dev/vda <<EOF
-g       # Create GPT partition table
-n       # New partition 1 (EFI)
+g       
+n       
 1
-        # Default start
+        
 +512M
-t       # Change type of partition 1 to EFI
+t       
 1
 1
-n       # New partition 2 (root)
+n      
 2
-        # Default start
-        # Default end (use remaining space)
-w       # Write changes
+        
+        
+w       
 EOF
 
 echo "Formatting partitions..."
