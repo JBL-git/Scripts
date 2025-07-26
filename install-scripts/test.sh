@@ -1,23 +1,26 @@
 #!/bin/bash
 set -e
 
-# Set time
+# Make sure you run this script as root
+
+echo "Setting up NTP..."
 timedatectl set-ntp true
 
-echo "Partitioning disk..."
+echo "Partitioning /dev/vda..."
 fdisk /dev/vda <<EOF
-g
-n
+g       # Create GPT partition table
+n       # New partition 1 (EFI)
 1
-
+        # Default start
 +512M
-t
+t       # Change type of partition 1 to EFI
 1
-n
+1
+n       # New partition 2 (root)
 2
-
-
-w
+        # Default start
+        # Default end (use remaining space)
+w       # Write changes
 EOF
 
 echo "Formatting partitions..."
@@ -26,103 +29,128 @@ mkfs.ext4 /dev/vda2
 
 echo "Mounting partitions..."
 mount /dev/vda2 /mnt
-mkdir /mnt/boot
+mkdir -p /mnt/boot
 mount /dev/vda1 /mnt/boot
 
 echo "Installing base system..."
-pacstrap /mnt base linux linux-firmware nano vim networkmanager sudo grub efibootmgr
+pacstrap /mnt base linux linux-firmware nano vim networkmanager sudo grub efibootmgr git base-devel
 
 echo "Generating fstab..."
 genfstab -U /mnt >> /mnt/etc/fstab
 
-echo "Chrooting into the system..."
+echo "Entering chroot to configure system..."
+
 arch-chroot /mnt /bin/bash <<'EOF'
 set -e
 
-# Time & locale
+echo "Setting timezone to UTC..."
 ln -sf /usr/share/zoneinfo/UTC /etc/localtime
 hwclock --systohc
 
+echo "Configuring locale..."
 sed -i 's/^#en_US.UTF-8 UTF-8/en_US.UTF-8 UTF-8/' /etc/locale.gen
 locale-gen
 echo "LANG=en_US.UTF-8" > /etc/locale.conf
 
-# Hostname & hosts
+echo "Setting hostname..."
 echo "arch" > /etc/hostname
-cat <<EOT > /etc/hosts
+
+echo "Configuring hosts file..."
+cat > /etc/hosts <<EOL
 127.0.0.1    localhost
 ::1          localhost
 127.0.1.1    arch.localdomain arch
-EOT
+EOL
 
-# Bootloader
+echo "Installing and configuring GRUB bootloader..."
 mount /dev/vda1 /boot
 grub-install --target=x86_64-efi --efi-directory=/boot --bootloader-id=GRUB
 grub-mkconfig -o /boot/grub/grub.cfg
 
-# Create user and set passwords
+echo "Setting root password..."
 rootpass=$(openssl rand -base64 16)
 echo "root:$rootpass" | chpasswd
 echo "$rootpass" > /root/root_password.txt
 chmod 600 /root/root_password.txt
+echo "Root password saved to /root/root_password.txt"
 
+echo "Creating user 'archuser'..."
 username="archuser"
 userpass=$(openssl rand -base64 16)
-useradd -m -G wheel -s /bin/bash $username
+useradd -m -G wheel -s /bin/bash "$username"
 echo "$username:$userpass" | chpasswd
-echo "$userpass" > /root/user_password.txt
-chmod 600 /root/user_password.txt
 sed -i 's/^# %wheel ALL=(ALL:ALL) ALL/%wheel ALL=(ALL:ALL) ALL/' /etc/sudoers
+echo "User password saved to /root/user_password.txt"
+echo "$username:$userpass" > /root/user_password.txt
+chmod 600 /root/user_password.txt
 
-# Enable parallel downloads
+echo "Enabling parallel downloads in pacman..."
 sed -i 's/^#ParallelDownloads/ParallelDownloads/' /etc/pacman.conf
 
-# Install Hyprland and essentials
+echo "Installing Hyprland and essential packages..."
 pacman -Sy --noconfirm \
-  hyprland xdg-desktop-portal-hyprland waybar foot wofi \
-  network-manager-applet xdg-utils polkit-gnome pipewire wireplumber \
-  bluez bluez-utils brightnessctl grim slurp wl-clipboard \
-  unzip unrar pavucontrol neovim git base-devel
+  hyprland \
+  xdg-desktop-portal-hyprland \
+  waybar \
+  foot \
+  wofi \
+  network-manager-applet \
+  xdg-utils \
+  polkit-gnome \
+  pipewire \
+  wireplumber \
+  bluez \
+  bluez-utils \
+  brightnessctl \
+  grim \
+  slurp \
+  wl-clipboard \
+  unzip \
+  unrar \
+  pavucontrol \
+  neovim \
+  git \
+  sddm \
+  mpv \
+  ranger \
+  ufw
 
-systemctl enable NetworkManager
-systemctl enable bluetooth
+echo "Enabling systemd services..."
+systemctl enable NetworkManager sddm ufw
 
-# Hyprland config
-mkdir -p /home/$username/.config/hypr
-cp -r /etc/xdg/hypr/* /home/$username/.config/hypr/
-chown -R $username:$username /home/$username/.config/hypr
+echo "Configuring UFW firewall..."
+ufw default deny incoming
+ufw default allow outgoing
+echo "y" | ufw enable
 
-# Autologin
-mkdir -p /etc/systemd/system/getty@tty1.service.d
-cat <<EOT > /etc/systemd/system/getty@tty1.service.d/override.conf
+echo "Setting up AUR helper yay for Brave Browser installation..."
+sed -i '/\[multilib\]/,/Include/ s/^#//' /etc/pacman.conf
+pacman -Sy --noconfirm
+
+cd /tmp
+git clone https://aur.archlinux.org/yay.git
+cd yay
+makepkg -si --noconfirm
+
+echo "Installing Brave browser..."
+yay -S --noconfirm brave-bin
+
+echo "Setting up autologin on tty1 for user $username..."
+mkdir -p /etc/systemd/system/getty@tty1.service.d/
+cat > /etc/systemd/system/getty@tty1.service.d/override.conf <<EOL
 [Service]
 ExecStart=
 ExecStart=-/usr/bin/agetty --autologin $username --noclear %I \$TERM
-EOT
+EOL
 
+echo "Setting up Hyprland autostart in user's bash_profile..."
 echo '[[ -z $DISPLAY && $XDG_SESSION_TYPE != "wayland" ]] && exec Hyprland' >> /home/$username/.bash_profile
 chown $username:$username /home/$username/.bash_profile
 
-# Enable multilib and install additional packages
-sed -i '/\[multilib\]/,/Include/ s/^#//' /etc/pacman.conf
-pacman -Sy --noconfirm sddm mpv ranger ufw
-
-systemctl enable sddm
-systemctl enable ufw
-ufw default deny incoming
-ufw default allow outgoing
-ufw enable
-
-# Install yay for AUR
-cd /tmp
-git clone https://aur.archlinux.org/yay.git
-chown -R $username:$username yay
-cd yay
-sudo -u $username makepkg -si --noconfirm
-sudo -u $username yay -S --noconfirm brave-bin
-
 EOF
 
-echo "Unmounting and rebooting..."
+echo "Unmounting partitions..."
 umount -R /mnt
+
+echo "Installation complete. Rebooting..."
 reboot
