@@ -1,8 +1,6 @@
 #!/bin/bash
 set -e
 
-# Make sure you run this script as root
-
 echo "Setting up NTP..."
 timedatectl set-ntp true
 
@@ -43,6 +41,23 @@ echo "Entering chroot to configure system..."
 arch-chroot /mnt /bin/bash <<'EOF'
 set -e
 
+echo "Generating and setting root password..."
+rootpass=$(openssl rand -base64 16)
+echo "root:$rootpass" | chpasswd
+echo "$rootpass" > /root/root_password.txt
+chmod 600 /root/root_password.txt
+echo "Root password saved to /root/root_password.txt"
+
+echo "Creating user 'archuser' and setting password..."
+username="archuser"
+userpass=$(openssl rand -base64 16)
+useradd -m -G wheel -s /bin/bash "$username"
+echo "$username:$userpass" | chpasswd
+sed -i 's/^# %wheel ALL=(ALL:ALL) ALL/%wheel ALL=(ALL:ALL) ALL/' /etc/sudoers
+echo "$username:$userpass" > /root/user_password.txt
+chmod 600 /root/user_password.txt
+echo "User password saved to /root/user_password.txt"
+
 echo "Setting timezone to UTC..."
 ln -sf /usr/share/zoneinfo/UTC /etc/localtime
 hwclock --systohc
@@ -66,23 +81,6 @@ echo "Installing and configuring GRUB bootloader..."
 mount /dev/vda1 /boot
 grub-install --target=x86_64-efi --efi-directory=/boot --bootloader-id=GRUB
 grub-mkconfig -o /boot/grub/grub.cfg
-
-echo "Setting root password..."
-rootpass=$(openssl rand -base64 16)
-echo "root:$rootpass" | chpasswd
-echo "$rootpass" > /root/root_password.txt
-chmod 600 /root/root_password.txt
-echo "Root password saved to /root/root_password.txt"
-
-echo "Creating user 'archuser'..."
-username="archuser"
-userpass=$(openssl rand -base64 16)
-useradd -m -G wheel -s /bin/bash "$username"
-echo "$username:$userpass" | chpasswd
-sed -i 's/^# %wheel ALL=(ALL:ALL) ALL/%wheel ALL=(ALL:ALL) ALL/' /etc/sudoers
-echo "User password saved to /root/user_password.txt"
-echo "$username:$userpass" > /root/user_password.txt
-chmod 600 /root/user_password.txt
 
 echo "Enabling parallel downloads in pacman..."
 sed -i 's/^#ParallelDownloads/ParallelDownloads/' /etc/pacman.conf
@@ -152,5 +150,4 @@ EOF
 echo "Unmounting partitions..."
 umount -R /mnt
 
-echo "Installation complete. Rebooting..."
-reboot
+echo "Installation complete. Please reboot..."
