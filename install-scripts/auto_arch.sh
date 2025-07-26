@@ -1,4 +1,4 @@
-!#/bin/bash
+#!/bin/bash
 
 set -e
 
@@ -44,13 +44,9 @@ genfstab -U /mnt >> /mnt/etc/fstab
 
 echo "chrooting..."
 
-arch-chroot /mnt
-
-
+arch-chroot /mnt /bin/bash
 echo "setting the timezone..."
-
 ln -sf /usr/share/zoneinfo/UTC /etc/localtime
-
 
 echo "setting the hardware clock..."
 
@@ -73,12 +69,11 @@ echo "setting the hostname..."
 
 echo "arch" > /etc/hostname
 
-cat <<EOF > /etc/hosts
+cat <<EOT > /etc/hosts
 127.0.0.1    localhost
 ::1          localhost
 127.0.1.1    arch.localdomain arch
-EOF
-
+EOT
 
 # installing and configuring the grub bootloader
 
@@ -87,7 +82,6 @@ echo "getting GRUB ready..."
 mount /dev/vda1 /boot
 grub-install --target=x86_64-efi --efi-directory=/boot --bootloader-id=GRUB
 grub-mkconfig -o /boot/grub/grub.cfg
-
 
 echo "setting root password and creating a user..."
 
@@ -105,8 +99,6 @@ echo "\$username:\$userpass" | chpasswd
 sed -i 's/^# %wheel ALL=(ALL:ALL) ALL/%wheel ALL=(ALL:ALL) ALL/' /etc/sudoers
 echo "User '\$username' password: \$userpass" > /root/user_password.txt
 chmod 600 /root/user_password.txt
-
-
 
 
 echo "installing parallel downloads in pacman..."
@@ -146,8 +138,6 @@ mkdir -p /home/\$username/.config/hypr
 cp -r /etc/xdg/hypr/* /home/\$username/.config/hypr/
 chown -R \$username:\$username /home/\$username/.config/hypr
 
-
-arch-chroot /mnt /bin/bash <<EOF
 mkdir -p /etc/systemd/system/getty@tty1.service.d/
 cat <<EOT > /etc/systemd/system/getty@tty1.service.d/override.conf
 [Service]
@@ -156,23 +146,37 @@ ExecStart=-/usr/bin/agetty --autologin archuser --noclear %I \$TERM
 EOT
 EOF
 
-
-
-arch-chroot /mnt /bin/bash <<EOF
-username="archuser"  # Change if needed
+username="archuser"  
 
 echo '[[ -z \$DISPLAY && \$XDG_SESSION_TYPE != "wayland" ]] && exec Hyprland' >> /home/\$username/.bash_profile
 chown \$username:\$username /home/\$username/.bash_profile
+
+echo "[*] installing sddm, Brave, Ranger, mpv, and ufw..."
+
+# enable multilib repo and add AUR helper (yay) for Brave
+sed -i '/\[multilib\]/,/Include/ s/^#//' /etc/pacman.conf
+pacman -Sy --noconfirm
+
+pacman -S --noconfirm sddm mpv ranger ufw git base-devel
+
+# enable sddm service
+systemctl enable sddm
+
+# install yay (AUR helper) to install brave browser
+git clone https://aur.archlinux.org/yay.git /tmp/yay
+cd /tmp/yay
+makepkg -si --noconfirm
+
+# install brave browser
+yay -S --noconfirm brave-bin
+
+# enable and configure UFW
+systemctl enable ufw
+ufw default deny incoming
+ufw default allow outgoing
+ufw enable
 EOF
 
-
-
-
-
-
-
-
 echo "exiting chroot..."
-unmount -R /mnt
-
+umount -R /mnt
 reboot
