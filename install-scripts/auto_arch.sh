@@ -128,10 +128,10 @@ pacman -Sy --noconfirm
 cd /tmp
 git clone https://aur.archlinux.org/yay.git
 cd yay
-makepkg -si --noconfirm
+runuser -u archuser -- makepkg -si --noconfirm
 
-echo "Installing Brave browser..."
-yay -S --noconfirm brave-bin
+echo "Installing zen browser..."
+runuser -u archuser -- yay -S --noconfirm zen-browser-bin
 
 echo "Setting up autologin on tty1 for user $username..."
 mkdir -p /etc/systemd/system/getty@tty1.service.d/
